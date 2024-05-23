@@ -7,75 +7,20 @@ namespace App\Service;
 use App\Dto\AddressDataDto;
 use App\Dto\BankAccountDto;
 use App\Dto\EditUserProfileDto;
+use App\Dto\ProfileRequirementsDto;
 use App\Entity\User;
 use App\Exception\FieldMissingException;
-use App\Exception\FullNameFieldMissingException;
-use App\Exception\PhoneFieldEmptyException;
-use App\Exception\UnauthorizedProfileChangeException;
 
-class ProfileEditorHandler
+class BankDataProcessor
 {
-    public function edit(EditUserProfileDto $profileDto, User $user): void
-    {
-        $this->validateClientProfile($profileDto, $user);
-        $this->validatePhoneField($profileDto);
-
-        $this->adjustCmpNames($profileDto, $user);
-        $this->processBankData($profileDto, $user);
-    }
-
-    private function validateClientProfile(EditUserProfileDto $profileDto, User $user): void
-    {
-        $this->preventClientProfileChange($profileDto, $user);
-        $this->validateCompanyName($profileDto);
-    }
-
-    private function preventClientProfileChange(EditUserProfileDto $profileDto, User $user): void
-    {
-        $isActiveUser = getActiveUser() === $user->getId();
-        $clientProfileIdChanged = $profileDto->getClientProfileId() !== $user->getClientProfileId();
-
-        if ($isActiveUser && $clientProfileIdChanged) {
-            throw new UnauthorizedProfileChangeException();
-        }
-    }
-
-    private function validateCompanyName(EditUserProfileDto $profileDto): void
-    {
-        if ($profileDto->getClientProfileId() !== 3 && empty($profileDto->getCmpFullName())) {
-            throw new FullNameFieldMissingException();
-        }
-    }
-
-    private function validatePhoneField(EditUserProfileDto $profileDto): void
-    {
-        if ($profileDto->getPhone() === null) {
-            throw new PhoneFieldEmptyException();
-        }
-    }
-
-    private function adjustCmpNames(EditUserProfileDto $profileDto, User $user): void
-    {
-        // только для не юр лиц
-        if ($profileDto->getClientProfileId() !== 1 && !$profileDto->getCmpShortName()) {
-            $profileDto->setCmpShortName($profileDto->getCmpFullName());
-        }
-
-        // Полное наименование организации только для физлиц
-        if ($profileDto->getClientProfileId() === 3 && empty($user->getCmpFullName()) && empty($profileDto->getCmpFullName())) {
-            $profileDto->setCmpFullName($this->generateUserFullName($profileDto));
-        }
-    }
-
+    /**
+     * @throws FieldMissingException
+     */
     private function processBankData(EditUserProfileDto $profileDto, User $user): void
     {
-        if ($this->isPhysicalAndNoData($profileDto) || $profileDto->isQuickRegistration()) {
-            return;
-        }
+        $bankAccountDto = $profileDto->getBankAccount();
 
-        $bankAccountDto = $profileDto->getBankAccount() ?? throw new FieldMissingException();
-
-        $this->validateBankAccountData($bankAccountDto);
+        $this->validateBankAccountData($profileDto, $bankAccountDto);
         $this->updateBankAccountData($bankAccountDto, $user->getId());
         $this->updateProfileRequirements($profileDto, $user);
     }
@@ -96,8 +41,18 @@ class ProfileEditorHandler
         return $profileDto->getClientProfileId() === 3 && $profileDto->getBankAccount() === null;
     }
 
-    private function validateBankAccountData(BankAccountDto $bankAccountDto): void
+    /**
+     * @throws FieldMissingException
+     */
+    private function validateBankAccountData(EditUserProfileDto $profileDto, ?BankAccountDto $bankAccountDto): void
     {
+        if ($this->isPhysicalAndNoData($profileDto) || $profileDto->isQuickRegistration()) {
+            return;
+        }
+
+        if (null === $bankAccountDto){
+            throw new FieldMissingException();
+        }
         $fieldMissing = empty($bankAccountDto->getAccount())
             || empty($bankAccountDto->getBank())
             || empty($bankAccountDto->getBankAddr())
@@ -111,7 +66,7 @@ class ProfileEditorHandler
 
     private function getBankConfigArray(BankAccountDto $bankAccountDto, int $ownerId): array
     {
-        $bankConfig = [
+        return [
             'bank_accounts' => [
                 $bankAccountDto->getBank(),
                 $bankAccountDto->getAccount(),
@@ -122,13 +77,14 @@ class ProfileEditorHandler
             'owner_type' => Model_BankAccount::OWNER_TYPE_USER,
             'owner_id' => $ownerId,
         ];
-
-        return $bankConfig;
     }
 
+    /**
+     * @throws FieldMissingException
+     */
     private function updateBankData(BankAccountDto $bankAccountDto, array $bankConfig): void
     {
-            Model_BankAccount::load($bankAccountDto->getId())?->update($bankConfig) ?? throw new FieldMissingException();
+        Model_BankAccount::load($bankAccountDto->getId())?->update($bankConfig) ?? throw new FieldMissingException();
     }
 
     private function createAccountBank(array $bankConfig, int $ownerId): void
