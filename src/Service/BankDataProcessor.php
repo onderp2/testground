@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Exception\BaseUserEditException;
 use App\Exception\FieldMissingException;
 use App\Service\Factory\ProfileRequirementsFactory;
+use App\Service\Mapper\ConfigMapper;
 
 class BankDataProcessor
 {
@@ -108,7 +109,7 @@ class BankDataProcessor
                 $this->preProcessAddressData($address);
 
                 $profileDto->$addressSetter($address);
-                $configData = $this->getAddressDataConfigArray($profileDto->$addressGetter(), $user->getId());
+                $configData = ConfigMapper::getAddressDataConfigArray($profileDto->$addressGetter(), $user->getId());
 
                 $this->savePostalData($configData, $address->getModelType());
             }
