@@ -174,28 +174,6 @@ class BankDataProcessor
         }
     }
 
-    private function getAddressDataConfigArray(AddressDataDto $postalAddress, int $ownerId): array
-    {
-        $postalConfigData = [
-            'house' => $postalAddress->getHouse(),
-            'house_unit' => $postalAddress->getHouseUnit(),
-            'street' => $postalAddress->getStreet(),
-            'city' => $postalAddress->getCity(),
-            'region' => $postalAddress->getRegion(),
-            'index' => $postalAddress->getIndex(),
-            'housing_unit' => $postalAddress->getHousingUnit(),
-            'office_unit' => $postalAddress->getOfficeUnit(),
-            'country_iso_nr' => $postalAddress->getCountryIsoNr(),
-        ];
-
-        $response = $postalConfigData;
-        $response['owner_id'] = $ownerId;
-        $response['owner_type'] = 'user';
-        $response['actual'] = true;
-
-        return $response;
-    }
-
     private function savePostalData(array $postalConfigData, int $modelType): void
     {
         Model_Address::saveAddress($postalConfigData, $modelType);
