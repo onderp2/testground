@@ -6,8 +6,10 @@ namespace App\Service;
 
 use App\Dto\EditUserProfileDto;
 use App\Entity\User;
+use App\Exception\FieldMissingException;
+use App\Exception\FullNameFieldMissingException;
 use App\Exception\PhoneFieldEmptyException;
-use App\Exception\UserTypeFieldMissing;
+use App\Exception\UnauthorizedProfileChangeException;
 use App\Service\EditorHandler\EmailEditorHandler;
 use App\Service\EditorHandler\ProfileEditorHandler;
 use App\Service\EditorHandler\UserRolesEditorHandler;
@@ -18,13 +20,14 @@ class EditUserServiceImplementation
         private readonly ProfileEditorHandler $profileEditorHandler,
         private readonly EmailEditorHandler $emailEditorHandler,
         private readonly UserRolesEditorHandler $userRolesEditorHandler,
-    )
-    {
+    ) {
     }
 
     /**
      * @throws PhoneFieldEmptyException
-     * @throws UserTypeFieldMissing
+     * @throws FieldMissingException
+     * @throws FullNameFieldMissingException
+     * @throws UnauthorizedProfileChangeException
      */
     public function editUserProfile(EditUserProfileDto $profileDto, User $user): void
     {
@@ -46,5 +49,4 @@ class EditUserServiceImplementation
     {
         return null !== $profileDto->getClientProfileId() && $user->getUserType() === Model_User::TYPE_USER;
     }
-
 }

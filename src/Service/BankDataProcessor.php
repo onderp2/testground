@@ -9,14 +9,17 @@ use App\Dto\BankAccountDto;
 use App\Dto\EditUserProfileDto;
 use App\Dto\ProfileRequirementsDto;
 use App\Entity\User;
+use App\Exception\BaseUserEditException;
 use App\Exception\FieldMissingException;
+use App\Service\Factory\ProfileRequirementsFactory;
 
 class BankDataProcessor
 {
     /**
      * @throws FieldMissingException
+     * @throws BaseUserEditException
      */
-    private function processBankData(EditUserProfileDto $profileDto, User $user): void
+    public function processBankData(EditUserProfileDto $profileDto, User $user): void
     {
         $bankAccountDto = $profileDto->getBankAccount();
 
@@ -25,12 +28,15 @@ class BankDataProcessor
         $this->updateProfileRequirements($profileDto, $user);
     }
 
+    /**
+     * @throws FieldMissingException
+     */
     private function updateBankAccountData(BankAccountDto $bankAccountDto, int $ownerId): void
     {
-        $bankConfig = $this->getBankConfigArray($bankAccountDto, $ownerId);
+        $bankConfig = ConfigMapper::getBankConfigArray($bankAccountDto, $ownerId);
 
         if ($bankAccountDto->getId()) {
-            $this->updateBankData($bankAccountDto, $bankConfig);
+            $this->updateAccountBankData($bankAccountDto, $bankConfig);
         } else {
             $this->createAccountBank($bankConfig, $ownerId);
         }
@@ -53,6 +59,7 @@ class BankDataProcessor
         if (null === $bankAccountDto){
             throw new FieldMissingException();
         }
+
         $fieldMissing = empty($bankAccountDto->getAccount())
             || empty($bankAccountDto->getBank())
             || empty($bankAccountDto->getBankAddr())
@@ -64,25 +71,10 @@ class BankDataProcessor
         }
     }
 
-    private function getBankConfigArray(BankAccountDto $bankAccountDto, int $ownerId): array
-    {
-        return [
-            'bank_accounts' => [
-                $bankAccountDto->getBank(),
-                $bankAccountDto->getAccount(),
-                $bankAccountDto->getBankAddr(),
-                $bankAccountDto->getBik(),
-            ],
-            'actual' => true,
-            'owner_type' => Model_BankAccount::OWNER_TYPE_USER,
-            'owner_id' => $ownerId,
-        ];
-    }
-
     /**
      * @throws FieldMissingException
      */
-    private function updateBankData(BankAccountDto $bankAccountDto, array $bankConfig): void
+    private function updateAccountBankData(BankAccountDto $bankAccountDto, array $bankConfig): void
     {
         Model_BankAccount::load($bankAccountDto->getId())?->update($bankConfig) ?? throw new FieldMissingException();
     }
@@ -94,63 +86,33 @@ class BankDataProcessor
 
     /**
      * @throws FieldMissingException
+     * @throws BaseUserEditException
      */
     private function updateProfileRequirements(EditUserProfileDto $profileDto, User $user)
     {
-        $profileRequirements = $this->getProfileRequirements($profileDto->getClientProfileId());
+        $profileRequirements = ProfileRequirementsFactory::getProfileRequirements($profileDto->getClientProfileId());
         $this->validateProfileRequirements($profileRequirements, $profileDto, $user->getId());
 
-        if ($profileRequirements->isRequirePostalAddress()) {
-            $postalAddress = $profileDto->getPostalAddress();
-            $this->validateSpecificAddressData($postalAddress);
-            $this->preProcessAddressData($postalAddress);
+        $addressTypes = [
+            'PostalAddress' => 'isRequirePostalAddress',
+            'LegalAddress' => 'isRequireLegalAddress'
+        ];
 
-            $profileDto->setPostalAddress($postalAddress);
-            $postalConfigData = $this->getPostalConfigData($profileDto->getPostalAddress(), $user->getId());
+        foreach ($addressTypes as $addressType => $requirementMethod) {
+            if ($profileRequirements->$requirementMethod()) {
+                $addressGetter = "get{$addressType}";
+                $addressSetter = "set{$addressType}";
 
-            $this->savePostalData($postalConfigData, $postalAddress->getModelType());
+                $address = $profileDto->$addressGetter();
+                $this->validateSpecificAddressData($address);
+                $this->preProcessAddressData($address);
+
+                $profileDto->$addressSetter($address);
+                $configData = $this->getAddressDataConfigArray($profileDto->$addressGetter(), $user->getId());
+
+                $this->savePostalData($configData, $address->getModelType());
+            }
         }
-
-        if ($profileRequirements->isRequireLegalAddress()) {
-            $legalAddress = $profileDto->getLegalAddress();
-            $this->validateSpecificAddressData($legalAddress);
-            $this->preProcessAddressData($legalAddress);
-
-            $profileDto->setLegalAddress($legalAddress);
-            $legalConfigData = $this->getPostalConfigData($profileDto->getLegalAddress(), $user->getId());
-
-            $this->savePostalData($legalConfigData, $legalAddress->getModelType());
-        }
-    }
-
-    private function getProfileRequirements(int $profileId): ProfileRequirementsDto
-    {
-        $requirements = match ($profileId) {
-            1 => [
-                'require_inn' => true,
-                'require_kpp' => false,
-                'require_ogrn' => true,
-                'require_legal_address' => true,
-                'require_postal_address' => true,
-            ],
-            2 => [
-                'require_inn' => true,
-                'require_kpp' => false,
-                'require_ogrn' => true,
-                'require_legal_address' => false,
-                'require_postal_address' => false,
-            ],
-            3 => [
-                'require_inn' => true,
-                'require_kpp' => false,
-                'require_ogrn' => false,
-                'require_legal_address' => false,
-                'require_postal_address' => false,
-            ],
-            default => throw new ResponseException('Указан невереный тип организации')
-        };
-
-        return new ProfileRequirementsDto($requirements);
     }
 
     private function validateProfileRequirements(ProfileRequirementsDto $profileRequirementsDto, EditUserProfileDto $userProfileDto, int $ownerId): void
@@ -179,12 +141,25 @@ class BankDataProcessor
             || ($addressDataDto->getHouse() && $addressDataDto->getHouseUnit());
 
         if ($isEmpty) {
-            throw new ResponseException("Не заполнены обязательные поля {$addressDataDto->getModeTypeText()} адреса");
+            throw new BaseUserEditException("Не заполнены обязательные поля {$addressDataDto->getModeTypeText()} адреса");
         }
 
         $this->validateAddressFieldLength($addressDataDto);
 
         return $addressDataDto;
+    }
+
+    private function validateAddressFieldLength(AddressDataDto $address): void
+    {
+        $fields = ['houseUnit', 'housingUnit', 'officeUnit'];
+
+        foreach ($fields as $field) {
+            if (isset($address->$field) && mb_strlen($address->$field, "UTF-8") > 20) {
+                $pseudo = Model_Address::_parameters()[$field]['pseudo'];
+
+                throw new BaseUserEditException("Поле '$pseudo' адреса может иметь длину не более 20 символов");
+            }
+        }
     }
 
     private function preProcessAddressData(AddressDataDto $postalDataDto): void
@@ -198,7 +173,7 @@ class BankDataProcessor
         }
     }
 
-    private function getPostalConfigData(AddressDataDto $postalAddress, int $ownerId): array
+    private function getAddressDataConfigArray(AddressDataDto $postalAddress, int $ownerId): array
     {
         $postalConfigData = [
             'house' => $postalAddress->getHouse(),
