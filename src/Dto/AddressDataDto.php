@@ -22,7 +22,6 @@ class AddressDataDto
 
     public ?string $officeUnit = null;
 
-
     public ?int $id;
 
     public int $countryIsoNr;
