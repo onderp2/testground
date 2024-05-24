@@ -74,25 +74,12 @@ class BankDataProcessor
 
     /**
      * @throws FieldMissingException
-     */
-    private function updateAccountBankData(BankAccountDto $bankAccountDto, array $bankConfig): void
-    {
-        Model_BankAccount::load($bankAccountDto->getId())?->update($bankConfig) ?? throw new FieldMissingException();
-    }
-
-    private function createAccountBank(array $bankConfig, int $ownerId): void
-    {
-        Model_BankAccount::create($bankConfig, $ownerId, Model_BankAccount::OWNER_TYPE_USER);
-    }
-
-    /**
-     * @throws FieldMissingException
      * @throws BaseUserEditException
      */
     private function updateProfileRequirements(EditUserProfileDto $profileDto, User $user)
     {
         $profileRequirements = ProfileRequirementsFactory::getProfileRequirements($profileDto->getClientProfileId());
-        $this->validateProfileRequirements($profileRequirements, $profileDto, $user->getId());
+        $this->validateProfileRequirements($profileRequirements, $profileDto);
 
         $addressTypes = [
             'PostalAddress' => 'isRequirePostalAddress',
@@ -116,8 +103,13 @@ class BankDataProcessor
         }
     }
 
-    private function validateProfileRequirements(ProfileRequirementsDto $profileRequirementsDto, EditUserProfileDto $userProfileDto, int $ownerId): void
-    {
+    /**
+     * @throws FieldMissingException
+     */
+    private function validateProfileRequirements(
+        ProfileRequirementsDto $profileRequirementsDto,
+        EditUserProfileDto $userProfileDto
+    ): void {
         if ($userProfileDto->getClientProfileId() === 3 && strlen($userProfileDto->getInn()) !== 12) {
             throw new FieldMissingException('iNN');
         }
@@ -133,7 +125,10 @@ class BankDataProcessor
         }
     }
 
-    private function validateSpecificAddressData(AddressDataDto $addressDataDto): AddressDataDto
+    /**
+     * @throws BaseUserEditException
+     */
+    private function validateSpecificAddressData(AddressDataDto $addressDataDto): void
     {
         $isEmpty = $addressDataDto->getIndex()
             || $addressDataDto->getRegion()
@@ -146,10 +141,11 @@ class BankDataProcessor
         }
 
         $this->validateAddressFieldLength($addressDataDto);
-
-        return $addressDataDto;
     }
 
+    /**
+     * @throws BaseUserEditException
+     */
     private function validateAddressFieldLength(AddressDataDto $address): void
     {
         $fields = ['houseUnit', 'housingUnit', 'officeUnit'];
@@ -177,5 +173,18 @@ class BankDataProcessor
     private function savePostalData(array $postalConfigData, int $modelType): void
     {
         Model_Address::saveAddress($postalConfigData, $modelType);
+    }
+
+    /**
+     * @throws FieldMissingException
+     */
+    private function updateAccountBankData(BankAccountDto $bankAccountDto, array $bankConfig): void
+    {
+        Model_BankAccount::load($bankAccountDto->getId())?->update($bankConfig) ?? throw new FieldMissingException();
+    }
+
+    private function createAccountBank(array $bankConfig, int $ownerId): void
+    {
+        Model_BankAccount::create($bankConfig, $ownerId, Model_BankAccount::OWNER_TYPE_USER);
     }
 }
