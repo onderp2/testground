@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-class FieldMissingException extends \Exception
+class FieldMissingException extends BaseUserEditException
 {
     public function __construct($message = 'One of fields is empty', string $fieldName = 'One of fields')
     {

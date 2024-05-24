@@ -10,6 +10,7 @@ use App\Dto\EditUserProfileDto;
 use App\Dto\ProfileRequirementsDto;
 use App\Entity\User;
 use App\Exception\BaseUserEditException;
+use App\Exception\ExceededFieldLengthException;
 use App\Exception\FieldMissingException;
 use App\Service\Factory\ProfileRequirementsFactory;
 use App\Service\Mapper\ConfigMapper;
@@ -111,17 +112,17 @@ class BankDataProcessor
         EditUserProfileDto $userProfileDto
     ): void {
         if ($userProfileDto->getClientProfileId() === 3 && strlen($userProfileDto->getInn()) !== 12) {
-            throw new FieldMissingException('iNN');
+            throw new FieldMissingException('INN field');
         }
 
         if (empty($userProfileDto->getInn()) && $profileRequirementsDto->isRequireKpp()) {
-            throw new FieldMissingException('INN');
+            throw new FieldMissingException('INN field');
         } elseif($profileRequirementsDto->isRequireInn()) {
             parent::_validateStatic($userProfileDto->getInn(), 'inn', array('inn'));
         } elseif ($profileRequirementsDto->isRequireKpp() && empty($userProfileDto->getKpp())) {
-            throw new FieldMissingException('KPP');
+            throw new FieldMissingException('KPP field');
         } elseif ($profileRequirementsDto->isRequireOgrn() && empty($userProfileDto->getOgrn())) {
-            throw new FieldMissingException('OGRN');
+            throw new FieldMissingException('OGRN field');
         }
     }
 
@@ -137,7 +138,7 @@ class BankDataProcessor
             || ($addressDataDto->getHouse() && $addressDataDto->getHouseUnit());
 
         if ($isEmpty) {
-            throw new BaseUserEditException("Не заполнены обязательные поля {$addressDataDto->getModeTypeText()} адреса");
+            throw new FieldMissingException("Не заполнены обязательные поля {$addressDataDto->getModeTypeText()} адреса");
         }
 
         $this->validateAddressFieldLength($addressDataDto);
@@ -154,19 +155,19 @@ class BankDataProcessor
             if (isset($address->$field) && mb_strlen($address->$field, "UTF-8") > 20) {
                 $pseudo = Model_Address::_parameters()[$field]['pseudo'];
 
-                throw new BaseUserEditException("Поле '$pseudo' адреса может иметь длину не более 20 символов");
+                throw new ExceededFieldLengthException("Поле '$pseudo' адреса может иметь длину не более 20 символов");
             }
         }
     }
 
-    private function preProcessAddressData(AddressDataDto $postalDataDto): void
+    private function preProcessAddressData(AddressDataDto $addressData): void
     {
-        if ($postalDataDto->getId()) {
-            $postalDataDto->setId(null);
+        if ($addressData->getId()) {
+            $addressData->setId(null);
         }
 
-        if (!$postalDataDto->getCountryIsoNr()) {
-            $postalDataDto->setCountryIsoNr(643);
+        if (!$addressData->getCountryIsoNr()) {
+            $addressData->setCountryIsoNr(643);
         }
     }
 

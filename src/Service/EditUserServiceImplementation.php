@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Dto\EditUserProfileDto;
 use App\Entity\User;
+use App\Exception\BaseUserEditException;
 use App\Exception\FieldMissingException;
 use App\Exception\FullNameFieldMissingException;
 use App\Exception\PhoneFieldEmptyException;
@@ -28,6 +29,7 @@ class EditUserServiceImplementation
      * @throws FieldMissingException
      * @throws FullNameFieldMissingException
      * @throws UnauthorizedProfileChangeException
+     * @throws BaseUserEditException
      */
     public function editUserProfile(EditUserProfileDto $profileDto, User $user): void
     {
